@@ -94,7 +94,7 @@ def plot_sentiment_series(df, path):
         .agg(sent_index=("pos", "mean"))
         .reset_index()
     )
-
+    export_csv(daily, "sentiment_daily")
     fig, ax = plt.subplots(figsize=(14, 5))
     sns.lineplot(data=daily, x="date", y="sent_index",
                  hue="subject", marker="o", ax=ax)
@@ -112,9 +112,9 @@ def plot_sentiment_series(df, path):
         f"{ts.strftime("%d/%m")}\nJan. {i+1}" for i, ts in enumerate(tick_pos)]
     ax.set_xticks(tick_pos, tick_labels, rotation=0)
 
-    ax.set_title("Índice de Sentimento Diário — BlueSky (faixas = janelas)")
-    ax.set_ylabel("Proporção de posts positivos")
-    ax.set_xlabel("Data inicial de cada janela")
+    # ax.set_title("Índice de Sentimento Diário — BlueSky (faixas = janelas)")
+    ax.set_ylabel("Proporção de publicações positivas")
+    ax.set_xlabel("Janelas")
     ax.set_ylim(0, 1)
     ax.legend(title="Candidato", bbox_to_anchor=(1.02, 1), loc="upper left")
     plt.tight_layout()
@@ -179,6 +179,12 @@ def pearson_and_reg(agg, polls):
             logging.info(f"{cand} [{tag}] | r={r:.3f} (p={p:.4f}) "
                          f"β1={beta.params[1]:.3f} R²={beta.rsquared:.3f}")
             results.append((cand, tag, r, p, beta.params[1], beta.rsquared))
+    res_df = pd.DataFrame(results, columns=[
+        "candidato", "métrica", "pearson_r", "p_val",
+        "beta1", "r2"
+    ])
+    export_csv(res_df, "pearson_reg")
+
     return results
 
 
@@ -188,9 +194,9 @@ def plot_volume_by_window(agg, path):
     sns.barplot(data=agg, x="window", y="total_posts",
                 hue="subject", dodge=True)
     plt.legend(title="Candidato")
-    plt.title("Volume de postagens por janela e candidato")
-    plt.ylabel("N° de posts")
-    plt.xlabel("Janela")
+    # plt.title("Volume de postagens por janela e candidato")
+    plt.ylabel("Número de publicações")
+    plt.xlabel("Janelas")
     plt.tight_layout()
     plt.savefig(path)
     plt.close()
@@ -200,6 +206,15 @@ def plot_share_vs_vote_first_round(agg, polls, path):
     """Plota o percentual de postagens (share_pos) X intenção de voto."""
     first_win = agg[agg["window"] <= 7]
     first_polls = polls.iloc[:7]
+
+    merged = (
+        first_win
+        .merge(
+            first_polls.assign(window=first_polls.reset_index().index + 1),
+            on="window"
+        )
+    )
+    export_csv(merged, "share_vs_vote")
 
     fig, axes = plt.subplots(3, 2, figsize=(10, 10), sharex=True, sharey=True)
     axes = axes.ravel()
@@ -224,10 +239,19 @@ def plot_share_vs_vote_first_round(agg, polls, path):
         axes[i].legend(loc="upper right", fontsize=8)     # ← NOVO
 
     axes[-1].legend(loc="upper center", bbox_to_anchor=(-0.1, -0.25), ncol=2)
-    fig.suptitle("Posts positivos (%) × Intenção de voto (%) — 1º turno")
+    # fig.suptitle("Posts positivos (%) × Intenção de voto (%) — 1º turno")
     fig.tight_layout(rect=[0, .03, 1, .95])
     fig.savefig(path)
     plt.close()
+
+
+def export_csv(df: pd.DataFrame, name: str):
+    """
+    Salva o DataFrame como CSV.
+    """
+    path = OUT_DIR / f"{name}.csv"
+    df.to_csv(path, index=False)
+    logging.info(f"CSV salvo em {path}")
 
 
 def main():
@@ -236,6 +260,7 @@ def main():
     plot_sentiment_series(df, OUT_DIR / "fig1_sent_series.png")
 
     agg = aggregate(df)
+    export_csv(agg, "window_agg")
     pearson_and_reg(agg, polls)
     plot_volume_by_window(agg, OUT_DIR / "fig2_volume.png")
     plot_share_vs_vote_first_round(agg, polls,
